@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barline Chord Charts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&family=Besley:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Music&text=%E2%99%AD%E2%99%AF&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: one sheet of manuscript on a desk. Ink is the only loud thing on the page;
+     harmonic analysis is written in blue pencil; the controls stay quiet along the desk edge. */
+  --desk: #dce1e7;
+  --sheet: #fcfcfa;
+  --ink: #12161d;
+  --ink-soft: #56606e;
+  --rule: #c1c8d1;
+  --pencil: #1f4fbf;
+  --pencil-wash: #e2e9fb;
+  --font-chord: "Barlow Condensed", "Noto Music", "Arial Narrow", "Segoe UI Symbol", "Apple Symbols", Arial, sans-serif;
+  --font-ui: "Barlow", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  --font-text: "Besley", "Noto Music", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk: #101317;
+    --sheet: #1a1e25;
+    --ink: #eceef2;
+    --ink-soft: #9aa4b1;
+    --rule: #353c47;
+    --pencil: #8fb1ff;
+    --pencil-wash: #222f4d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --desk: #101317;
+  --sheet: #1a1e25;
+  --ink: #eceef2;
+  --ink-soft: #9aa4b1;
+  --rule: #353c47;
+  --pencil: #8fb1ff;
+  --pencil-wash: #222f4d;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--desk);
+  color: var(--ink);
+  font: 400 15px/1.45 var(--font-ui);
+  -webkit-text-size-adjust: 100%;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--pencil); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---------- desk edge: brand and controls ---------- */
+.top {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  gap: .8rem 1.5rem;
+  max-width: 1400px; margin: 0 auto;
+  padding: 1rem 1.25rem .35rem;
+}
+.brand { display: flex; align-items: center; gap: .5rem; padding-bottom: .2rem; }
+.brand svg { width: 19px; height: 24px; fill: var(--ink); flex: none; }
+.brand h1 { margin: 0; font: 700 1.4rem/1 var(--font-text); letter-spacing: -.01em; }
+.brand p { margin: 0; color: var(--ink-soft); font-size: .8125rem; }
+.tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .7rem 1.15rem; }
+.field { display: flex; flex-direction: column; gap: .2rem; }
+.lab {
+  font-size: .6875rem; font-weight: 500; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+.row { display: flex; align-items: center; gap: .3rem; }
+.btn, .ctl {
+  height: 2.1rem; padding: 0 .7rem;
+  border: 1px solid var(--rule); border-radius: 6px;
+  background: var(--sheet);
+}
+.btn { cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink-soft); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--sheet); }
+.btn.sq { width: 2.1rem; padding: 0; font-size: 1.15rem; line-height: 1; }
+.btn[aria-pressed="true"] {
+  background: var(--pencil-wash); border-color: var(--pencil); color: var(--pencil);
+  position: relative; z-index: 1;
+}
+.seg { display: flex; }
+.seg .btn { border-radius: 0; margin-left: -1px; }
+.seg .btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg .btn:last-child { border-radius: 0 6px 6px 0; }
+.count-out { min-width: 1.5rem; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+#inp-time { width: 4.2rem; text-align: center; font-variant-numeric: tabular-nums; }
+.status {
+  max-width: 1400px; margin: 0 auto; padding: 0 1.25rem;
+  min-height: 1.5rem; font-size: .8125rem; color: var(--pencil); font-weight: 500;
+}
+
+/* ---------- work area ---------- */
+.work {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 25rem);
+  gap: 1.25rem; align-items: start;
+  max-width: 1400px; margin: 0 auto; padding: .25rem 1.25rem 3rem;
+}
+body.no-source .work { grid-template-columns: minmax(0, 1fr); }
+body.no-source .source { display: none; }
+
+.sheet {
+  container-type: inline-size;
+  width: 100%; max-width: 60rem; justify-self: center;
+  background: var(--sheet);
+  border: 1px solid var(--rule); border-radius: 3px;
+  box-shadow: 0 14px 30px -20px rgb(0 0 0 / .4);
+  padding: clamp(1rem, 3vw, 2.4rem);
+}
+.sheet-head [contenteditable] { outline-offset: 1px; border-radius: 3px; min-width: 2ch; }
+.sheet-head [contenteditable]:hover,
+.sheet-head [contenteditable]:focus { background: var(--pencil-wash); }
+.sheet-head [contenteditable]:empty::before {
+  content: attr(data-placeholder); color: var(--ink-soft); opacity: .65;
+}
+.t-title {
+  display: block; text-align: center; text-wrap: balance;
+  font: 700 clamp(1.35rem, 4.4cqw, 2.15rem)/1.15 var(--font-text);
+  letter-spacing: -.01em; padding: .08em .2em;
+}
+.t-sub {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: .15rem 1rem; margin-top: .3rem;
+  font-size: clamp(.9rem, 2.2cqw, 1.06rem);
+}
+.t-sub > * { padding: .05em .2em; }
+.t-style { font-style: italic; }
+.t-composer { flex: 1 1 12rem; text-align: center; }
+.t-key { color: var(--ink-soft); font-weight: 500; white-space: nowrap; }
+
+#chart { --cols: 4; margin-top: .6rem; }
+.section { margin-top: 1.35rem; }
+.sec-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: .3rem .6rem; margin-bottom: .35rem;
+}
+.sec-label {
+  font: 700 1rem/1 var(--font-text);
+  background: var(--ink); color: var(--sheet);
+  border: 0; border-radius: 2px;
+  padding: .3em .5em; min-width: 1.9em; max-width: 100%;
+  text-align: center; field-sizing: content;
+}
+.sec-label::placeholder { color: var(--sheet); opacity: .5; font-weight: 500; }
+.sec-tools { display: flex; align-items: center; gap: .1rem; font-size: .8125rem; color: var(--ink-soft); }
+.sec-tools button {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  padding: .25rem .5rem; border-radius: 4px; min-height: 1.75rem;
+}
+.sec-tools button:hover:not(:disabled) { background: var(--pencil-wash); color: var(--pencil); }
+.sec-tools button:disabled { opacity: .35; cursor: default; }
+.sec-tools .count { color: var(--ink); font-variant-numeric: tabular-nums; padding: 0 .15rem; }
+.sec-tools .sep { width: 1px; height: 1em; background: var(--rule); margin: 0 .35rem; }
+
+/* ---------- the chart ---------- */
+.grid {
+  display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  row-gap: .8em;
+  font-size: clamp(19px, calc(24.5cqw / var(--cols)), 54px);
+  --thin: max(1.25px, .03em);
+  --thick: max(2.5px, .08em);
+  --dot: max(3px, .1em);
+}
+.bar {
+  position: relative; min-width: 0; min-height: 2em;
+  display: flex; align-items: center;
+  padding: .15em .25em .15em .38em;
+  border-left: var(--thin) solid transparent;
+  border-right: var(--thin) solid transparent;
+  cursor: text;
+}
+.bar.bl-left { border-left-color: var(--ink); }
+.bar.bl-right { border-right-color: var(--ink); }
+.bar:hover, .bar:focus-visible { background: var(--pencil-wash); }
+.bar.editing { z-index: 4; background: transparent; }
+.bar.has-rs { padding-left: .78em; }
+.bar.has-re { padding-right: .62em; }
+.rep { position: absolute; top: 0; bottom: 0; width: var(--thick); background: var(--ink); }
+.rep-s { left: calc(-1 * var(--thin)); }
+.rep-e { right: calc(-1 * var(--thin)); }
+.rep::before {
+  content: ""; position: absolute; top: 0; bottom: 0;
+  width: var(--thin); background: var(--ink);
+}
+.rep-s::before { left: calc(var(--thick) + .07em); }
+.rep-e::before { right: calc(var(--thick) + .07em); }
+.rep::after {
+  content: ""; position: absolute; top: calc(50% - .26em);
+  width: var(--dot); height: var(--dot); border-radius: 50%;
+  background: var(--ink); box-shadow: 0 .4em 0 var(--ink);
+}
+.rep-s::after { left: calc(var(--thick) + .07em + var(--thin) + .1em); }
+.rep-e::after { right: calc(var(--thick) + .07em + var(--thin) + .1em); }
+.dbl {
+  position: absolute; top: 0; bottom: 0; right: calc(-1 * var(--thin));
+  width: calc(var(--thin) * 2 + .09em);
+  border-left: var(--thin) solid var(--ink); border-right: var(--thin) solid var(--ink);
+}
+/* The time signature sits in a gutter left of the first barline, so it never takes room from the bar. */
+#chart.has-ts .grid { margin-left: var(--ts-gutter, .8em); }
+.timesig {
+  position: absolute; right: calc(100% + var(--thin) + .14em); top: 50%;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  font: 600 .7em/1 var(--font-chord); pointer-events: none;
+}
+.timesig span + span { border-top: var(--thin) solid var(--ink); margin-top: .07em; padding-top: .07em; }
+.volta {
+  position: absolute; top: -.32em; left: 0; right: .25em; height: .8em;
+  border-top: var(--thin) solid var(--ink); border-left: var(--thin) solid var(--ink);
+  font: 600 max(10px, .3em)/1 var(--font-chord); padding: .2em 0 0 .35em;
+  pointer-events: none;
+}
+.bar-content {
+  flex: 1; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .15em .3em;
+}
+.bar-content.n2 { font-size: .8em; }
+.bar-content.n3 { font-size: .62em; }
+.bar-content.n4 { font-size: .52em; }
+.chord { flex: 1 1 0; min-width: min-content; display: flex; flex-direction: column; align-items: flex-start; }
+.sym { display: inline-flex; align-items: stretch; font: 600 1em/1 var(--font-chord); white-space: nowrap; }
+.stack {
+  display: flex; flex-direction: column; justify-content: space-between;
+  font-size: .5em; line-height: 1; padding: .08em 0 .16em .06em;
+}
+.acc { font-size: 1.2em; line-height: .85; }
+.bass { font-size: .56em; align-self: flex-end; margin-left: .06em; transform: translateY(.18em); }
+.num {
+  font: 500 max(11px, .34em)/1.15 var(--font-text);
+  color: var(--pencil); white-space: nowrap; min-height: 1.15em; padding-left: .04em;
+}
+.num.above { margin-bottom: .14em; }
+.num.below { margin-top: .34em; }
+.simile { flex: 1 1 0; display: flex; justify-content: center; }
+.simile svg { width: .82em; height: .82em; fill: var(--ink); }
+.rest { flex: 1 1 0; }
+.beat { flex: 1 1 0; font: 500 .8em/1 var(--font-chord); color: var(--ink-soft); }
+.word { font: 500 .5em/1.1 var(--font-chord); color: var(--ink-soft); }
+
+.bar-input {
+  flex: 1; width: 100%; min-width: 0;
+  font: 600 max(16px, .6em)/1.2 var(--font-chord);
+  border: 0; border-bottom: 2px solid var(--pencil); border-radius: 3px 3px 0 0;
+  background: var(--pencil-wash); color: var(--ink);
+  padding: .3em .35em; outline: none;
+}
+.pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 4px; width: max-content; padding: 5px;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px;
+  box-shadow: 0 12px 26px -12px rgb(0 0 0 / .5);
+  font: 500 13px/1 var(--font-ui); cursor: default;
+}
+.pop button {
+  height: 28px; min-width: 32px; padding: 0 .55rem;
+  border: 1px solid var(--rule); border-radius: 5px; background: var(--sheet);
+  cursor: pointer; white-space: nowrap;
+}
+.pop button.glyph { font-family: var(--font-mono); font-weight: 600; }
+.pop button:hover { border-color: var(--ink-soft); }
+.pop button[aria-pressed="true"] { background: var(--pencil-wash); border-color: var(--pencil); color: var(--pencil); }
+
+.ghost {
+  margin-top: 1.5rem; padding: .5rem .9rem;
+  border: 1px dashed var(--rule); border-radius: 6px;
+  background: transparent; color: var(--ink-soft); cursor: pointer; font-weight: 500;
+}
+.ghost:hover { border-color: var(--pencil); color: var(--pencil); }
+.hint { max-width: 65ch; margin: .9rem 0 0; font-size: .8125rem; color: var(--ink-soft); }
+code, kbd {
+  font-family: var(--font-mono); font-size: .92em;
+  background: var(--pencil-wash); color: var(--ink);
+  padding: .05em .32em; border-radius: 3px;
+}
+
+/* ---------- text file panel ---------- */
+.source {
+  position: sticky; top: 1rem; min-width: 0;
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px;
+  padding: .9rem;
+}
+.source-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .55rem; }
+.source h2 { margin: 0; font: 700 1rem/1.2 var(--font-text); }
+#txt {
+  display: block; width: 100%; min-height: 18rem; resize: vertical;
+  font: 13px/1.55 var(--font-mono); white-space: pre; overflow: auto; tab-size: 2;
+  background: color-mix(in srgb, var(--desk) 40%, var(--sheet));
+  border: 1px solid var(--rule); border-radius: 4px; padding: .6rem .7rem;
+}
+
+@media (max-width: 980px) {
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .source { position: static; }
+}
+@media (max-width: 520px) {
+  .top, .status { padding-left: 1rem; padding-right: 1rem; }
+  .work { padding-left: .75rem; padding-right: .75rem; }
+  .brand p { display: none; }
+}
+
+@page { margin: 14mm; }
+@media print {
+  :root {
+    --desk: #fff !important; --sheet: #fff !important; --ink: #000 !important;
+    --ink-soft: #333 !important; --rule: #999 !important;
+    --pencil: #1f4fbf !important; --pencil-wash: transparent !important;
+    color-scheme: light !important;
+  }
+  .top, .status, .source, .screen-only, .pop { display: none !important; }
+  body { background: #fff; }
+  .work { display: block; padding: 0; max-width: none; }
+  .sheet { border: 0; box-shadow: none; padding: 0; max-width: none; }
+  .sheet-head [contenteditable]:empty { display: none; }
+  .sec-label:placeholder-shown { display: none; }
+  .sec-label { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .section { break-inside: avoid; }
+  .bar { background: transparent !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 19 24" aria-hidden="true"><rect x="0" y="1" width="4.4" height="22"/><rect x="6.8" y="1" width="1.7" height="22"/><circle cx="13.6" cy="8.6" r="2"/><circle cx="13.6" cy="15.4" r="2"/></svg>
+    <div>
+      <h1>Barline</h1>
+      <p>Chord charts kept as plain text</p>
+    </div>
+  </div>
+
+  <div class="tools" role="toolbar" aria-label="Chart tools">
+    <div class="field" role="group" aria-label="File">
+      <span class="lab">File</span>
+      <div class="row">
+        <button type="button" class="btn" id="btn-new">New</button>
+        <button type="button" class="btn" id="btn-open">Open…</button>
+        <button type="button" class="btn primary" id="btn-save">Save .txt</button>
+        <button type="button" class="btn" id="btn-print" hidden>Print</button>
+      </div>
+    </div>
+
+    <div class="field" role="group" aria-label="History">
+      <span class="lab">History</span>
+      <div class="row">
+        <button type="button" class="btn" id="btn-undo">Undo</button>
+        <button type="button" class="btn" id="btn-redo">Redo</button>
+      </div>
+    </div>
+
+    <label class="field">
+      <span class="lab">Key</span>
+      <select class="ctl" id="sel-key"></select>
+    </label>
+
+    <div class="field" role="group" aria-label="Transpose">
+      <span class="lab">Transpose</span>
+      <div class="row">
+        <button type="button" class="btn sq" id="btn-down" aria-label="Transpose down a semitone" title="Down a semitone">−</button>
+        <button type="button" class="btn sq" id="btn-up" aria-label="Transpose up a semitone" title="Up a semitone">+</button>
+        <select class="ctl" id="sel-to" aria-label="Transpose to a key"></select>
+      </div>
+    </div>
+
+    <label class="field">
+      <span class="lab">Time</span>
+      <input class="ctl" id="inp-time" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="4/4">
+    </label>
+
+    <div class="field" role="group" aria-label="Bars per line">
+      <span class="lab">Bars per line</span>
+      <div class="row">
+        <button type="button" class="btn sq" id="btn-cols-dec" aria-label="Fewer bars per line">−</button>
+        <output class="count-out" id="out-cols">4</output>
+        <button type="button" class="btn sq" id="btn-cols-inc" aria-label="More bars per line">+</button>
+      </div>
+    </div>
+
+    <div class="field" role="group" aria-label="Roman numerals">
+      <span class="lab">Roman numerals</span>
+      <div class="seg" id="seg-num">
+        <button type="button" class="btn" data-num="off" aria-pressed="false">Off</button>
+        <button type="button" class="btn" data-num="above" aria-pressed="false">Above</button>
+        <button type="button" class="btn" data-num="below" aria-pressed="false">Below</button>
+      </div>
+    </div>
+
+    <div class="field" role="group" aria-label="Panels">
+      <span class="lab">Panel</span>
+      <button type="button" class="btn" id="btn-text" aria-pressed="true">Text file</button>
+    </div>
+  </div>
+</header>
+
+<p class="status" id="status" role="status" aria-live="polite"></p>
+
+<main class="work">
+  <section class="sheet" id="sheet" aria-label="Chord chart">
+    <div class="sheet-head">
+      <div class="t-title" id="ed-title" contenteditable="plaintext-only" role="textbox" aria-label="Song title" data-placeholder="Song title" spellcheck="false"></div>
+      <div class="t-sub">
+        <span class="t-style" id="ed-style" contenteditable="plaintext-only" role="textbox" aria-label="Style" data-placeholder="Style" spellcheck="false"></span>
+        <span class="t-composer" id="ed-composer" contenteditable="plaintext-only" role="textbox" aria-label="Composer" data-placeholder="Composer" spellcheck="false"></span>
+        <span class="t-key" id="key-label"></span>
+      </div>
+    </div>
+
+    <div id="chart"></div>
+
+    <button type="button" class="ghost screen-only" id="btn-add-section">+ Add section</button>
+    <p class="hint screen-only">
+      Click a bar and type a chord: <code>E</code>, <code>C#m7</code>, <code>E/G#</code>.
+      Put two chords in one bar with a space: <code>A B</code>. Use <code>.</code> to hold a beat, as in <code>. E/G#</code>.
+      Type <code>%</code> to repeat the previous bar. <kbd>Enter</kbd> or <kbd>Tab</kbd> moves to the next bar and adds one at the end.
+    </p>
+  </section>
+
+  <aside class="source" id="source" aria-label="Text file">
+    <div class="source-head">
+      <h2>Text file</h2>
+      <button type="button" class="btn" id="btn-copy">Copy</button>
+    </div>
+    <textarea id="txt" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="The chart as plain text"></textarea>
+    <p class="hint">
+      Save writes exactly this text, and Open reads it back. You can edit it here too:
+      <code>|</code> separates bars, <code>|:</code> and <code>:|</code> mark repeats, <code>||</code> is a double barline, <code>[A]</code> starts a section.
+    </p>
+  </aside>
+</main>
+
+<input type="file" id="file" accept=".txt,text/plain" hidden>
+
+<script id="core">
+/* ===== Music and file-format logic. No DOM in this block. ===== */
+const LETTERS = "CDEFGAB";
+const NAT = [0, 2, 4, 5, 7, 9, 11];
+const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+const MAJOR_BY_PC = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const MINOR_BY_PC = ["Cm", "C#m", "Dm", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
+const MAJOR_KEYS = ["C", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B"];
+const MINOR_KEYS = ["Cm", "C#m", "Dm", "D#m", "Ebm", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "Bbm", "Bm"];
+const FLAT_MAJOR = new Set(["F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]);
+const FLAT_MINOR = new Set(["D", "G", "C", "F", "Bb", "Eb", "Ab"]);
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII"];
+const QUAL_RE = /^(?:maj|ma|min|mi|m|dim|aug|sus|add|alt|omit|no|dom|o|h|ø|°|Δ|\^|\+|-|[0-9]+|#|b|\(|\)|,|\/[0-9]+)*$/i;
+const SEP_RE = /(:\|\|:|:\|:|\|\|:|:\|\||\|:|:\||\|\||\|)/;
+
+function ascii(s) { return String(s == null ? "" : s).replace(/♯/g, "#").replace(/♭/g, "b"); }
+function parseNote(s) {
+  const m = /^([A-G])([#b]?)$/.exec(s);
+  return m ? { l: LETTERS.indexOf(m[1]), a: m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0 } : null;
+}
+function notePc(n) { return (NAT[n.l] + n.a + 12) % 12; }
+function noteName(n) { return LETTERS[n.l] + (n.a > 0 ? "#" : n.a < 0 ? "b" : ""); }
+function wrapAcc(a) { return ((a + 6) % 12 + 12) % 12 - 6; }
+
+function parseKey(s) {
+  const m = /^\s*([A-Ga-g])([#b]?)\s*(.*?)\s*$/.exec(ascii(s));
+  if (!m) return null;
+  const mode = m[3];
+  let minor;
+  if (mode === "" || mode === "M" || /^maj(or)?$/i.test(mode)) minor = false;
+  else if (/^(m|min|minor|-)$/i.test(mode)) minor = true;
+  else return null;
+  const tonic = parseNote(m[1].toUpperCase() + m[2]);
+  return { tonic, minor, name: noteName(tonic) + (minor ? "m" : "") };
+}
+
+function parseChord(tok) {
+  const m = /^([A-G])([#b]?)(.*)$/.exec(tok);
+  if (!m) return null;
+  let q = m[3], bass = null;
+  const bm = /^(.*)\/([A-G][#b]?)$/.exec(q);
+  if (bm) { q = bm[1]; bass = parseNote(bm[2]); }
+  if (!QUAL_RE.test(q)) return null;
+  return { root: parseNote(m[1] + m[2]), q, bass };
+}
+
+function shiftNote(n, ld, sd, flat) {
+  const l = (n.l + ld) % 7, pc = (notePc(n) + sd) % 12;
+  const a = wrapAcc(pc - NAT[l]);
+  if (a > 1 || a < -1) return parseNote((flat ? FLAT_NAMES : SHARP_NAMES)[pc]);
+  return { l, a };
+}
+function transposeBarText(text, ld, sd, flat) {
+  if (!text) return text;
+  return text.split(" ").map((tok) => {
+    const c = parseChord(tok);
+    if (!c) return tok;
+    return noteName(shiftNote(c.root, ld, sd, flat)) + c.q + (c.bass ? "/" + noteName(shiftNote(c.bass, ld, sd, flat)) : "");
+  }).join(" ");
+}
+/* Moves every chord by the interval between the old and new tonic, letter and semitone together,
+   so C#m7 in E becomes Dm7 in F and D#m7 in F#, never an enharmonic stand-in. */
+function transposeSong(song, toName) {
+  const from = parseKey(song.key), to = parseKey(toName);
+  if (!from || !to) return;
+  const ld = (to.tonic.l - from.tonic.l + 7) % 7;
+  const sd = (notePc(to.tonic) - notePc(from.tonic) + 12) % 12;
+  const flat = (to.minor ? FLAT_MINOR : FLAT_MAJOR).has(noteName(to.tonic));
+  for (const sec of song.sections) for (const bar of sec.bars) bar.chords = transposeBarText(bar.chords, ld, sd, flat);
+  song.key = to.name;
+}
+function keyBySemitones(keyName, delta) {
+  const k = parseKey(keyName);
+  const pc = ((notePc(k.tonic) + delta) % 12 + 12) % 12;
+  return (k.minor ? MINOR_BY_PC : MAJOR_BY_PC)[pc];
+}
+
+function prettyQuality(q) { return q.replace(/b(?=\d)/g, "♭").replace(/#(?=\d)/g, "♯"); }
+/* Roman numeral for one chord. Degrees are measured against the major scale on the tonic,
+   so in A minor the chords C, F and G read ♭III, ♭VI and ♭VII. */
+function numeralFor(tok, keyName) {
+  const c = parseChord(tok), k = parseKey(keyName);
+  if (!c || !k) return "";
+  const degree = (n) => {
+    const d = (n.l - k.tonic.l + 7) % 7;
+    const a = wrapAcc(((notePc(n) - notePc(k.tonic) + 12) % 12) - NAT[d]);
+    return { d, acc: a < 0 ? "♭".repeat(-a) : "♯".repeat(a) };
+  };
+  const r = degree(c.root);
+  let lower = false, mark = "", rest = c.q, m;
+  if (/^(maj|ma(?!dd)|M|Δ|\^)/.test(c.q)) { /* major family, keep as written */ }
+  else if ((m = /^(?:min|mi|m|-)(.*)$/.exec(c.q))) {
+    lower = true; rest = m[1];
+    if (rest === "7b5") { mark = "ø"; rest = "7"; }
+  }
+  else if ((m = /^(?:dim|°|o(?!mit))(.*)$/.exec(c.q))) { lower = true; mark = "°"; rest = m[1]; }
+  else if ((m = /^(?:ø|h)(.*)$/.exec(c.q))) { lower = true; mark = "ø"; rest = m[1]; }
+  else if ((m = /^(?:aug|\+)(.*)$/.exec(c.q))) { mark = "+"; rest = m[1]; }
+  let out = r.acc + (lower ? ROMAN[r.d].toLowerCase() : ROMAN[r.d]) + mark + prettyQuality(rest);
+  if (c.bass) { const b = degree(c.bass); out += "/" + b.acc + (b.d + 1); }
+  return out;
+}
+
+function fixToken(t) {
+  if (t === "-") return "";
+  if (/^n\.?c\.?$/i.test(t)) return "N.C.";
+  if (parseChord(t)) return t;
+  const cand = (t[0].toUpperCase() + t.slice(1)).replace(/\/([a-g])([#b]?)$/, (_, l, a) => "/" + l.toUpperCase() + a);
+  return parseChord(cand) ? cand : t;
+}
+function normalizeBarText(v) {
+  return ascii(v).replace(/\|/g, " ").trim().split(/\s+/).filter(Boolean).map(fixToken).filter(Boolean).join(" ");
+}
+
+function newBar() { return { chords: "", rs: false, re: false, dbl: false }; }
+function clampCols(n) { n = parseInt(n, 10); return Number.isFinite(n) ? Math.min(8, Math.max(1, n)) : 4; }
+
+const HEADER_KEYS = {
+  "title": "title", "song": "title",
+  "composer": "composer", "artist": "composer", "by": "composer",
+  "style": "style", "feel": "style",
+  "key": "key",
+  "time": "time", "time signature": "time", "meter": "time",
+  "bars per line": "cols", "bars per row": "cols", "columns": "cols",
+  "numerals": "numerals", "roman numerals": "numerals"
+};
+function setHeader(song, field, value) {
+  if (field === "cols") song.cols = clampCols(value);
+  else if (field === "numerals") {
+    const v = value.toLowerCase();
+    song.numerals = /^(above|over|top)$/.test(v) ? "above" : /^(below|under|bottom|on|yes)$/.test(v) ? "below" : "off";
+  }
+  else song[field] = value;
+}
+function parseBars(line, bars) {
+  const parts = line.split(SEP_RE);
+  const first = normalizeBarText(parts[0]);
+  if (first) bars.push(Object.assign(newBar(), { chords: first }));
+  for (let i = 1; i < parts.length; i += 2) {
+    const sep = parts[i], text = parts[i + 1] || "";
+    const prev = bars[bars.length - 1];
+    if (prev) {
+      if (sep[0] === ":") { prev.re = true; prev.dbl = false; }
+      else if (sep === "||" && !prev.re) prev.dbl = true;
+    }
+    if (i + 2 >= parts.length && !text.trim()) break;
+    bars.push(Object.assign(newBar(), { chords: normalizeBarText(text), rs: sep[sep.length - 1] === ":" }));
+  }
+}
+function guessKey(song) {
+  for (const sec of song.sections) for (const bar of sec.bars) for (const tok of bar.chords.split(" ")) {
+    const c = parseChord(tok);
+    if (c) return noteName(c.root) + (/^(min|mi|m(?!aj|a)|-)/.test(c.q) ? "m" : "");
+  }
+  return "C";
+}
+
+function parse(text) {
+  const song = { title: "", composer: "", style: "", key: "", time: "4/4", cols: 4, numerals: "off", extra: [], sections: [] };
+  let sec = null;
+  for (const raw of String(text == null ? "" : text).replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let m = /^\[(.*)\]$/.exec(line);
+    if (m) { sec = { label: m[1].trim(), bars: [] }; song.sections.push(sec); continue; }
+    m = /^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$/.exec(line);
+    const field = m && HEADER_KEYS[m[1].toLowerCase().replace(/\s+/g, " ")];
+    if (field) { setHeader(song, field, m[2].trim()); continue; }
+    if (m && !line.includes("|")) { song.extra.push(line); continue; }
+    if (!sec) { sec = { label: "", bars: [] }; song.sections.push(sec); }
+    parseBars(line, sec.bars);
+  }
+  if (!song.sections.length) song.sections.push({ label: "A", bars: Array.from({ length: song.cols * 2 }, newBar) });
+  for (const s of song.sections) if (!s.bars.length) s.bars.push(newBar());
+  const k = parseKey(song.key);
+  song.key = k ? k.name : guessKey(song);
+  return song;
+}
+
+function serialize(song) {
+  const out = [
+    "Title: " + song.title,
+    "Composer: " + song.composer,
+    "Style: " + song.style,
+    "Key: " + song.key,
+    "Time: " + song.time,
+    "Bars per line: " + song.cols,
+    "Numerals: " + song.numerals
+  ].map((l) => l.trimEnd());
+  for (const e of song.extra) out.push(e);
+  let w = 4;
+  for (const sec of song.sections) for (const bar of sec.bars) w = Math.max(w, bar.chords.length);
+  for (const sec of song.sections) {
+    out.push("", "[" + sec.label + "]");
+    for (let i = 0; i < sec.bars.length; i += song.cols) {
+      const row = sec.bars.slice(i, i + song.cols);
+      let line = "";
+      row.forEach((bar, j) => {
+        const prev = j ? row[j - 1] : null;
+        line += (prev ? (prev.re ? ":" : prev.dbl && !bar.rs ? "|" : " ") : "") + "|" + (bar.rs ? ":" : " ");
+        line += " " + bar.chords.padEnd(w) + " ";
+      });
+      const last = row[row.length - 1];
+      out.push(line + (last.re ? ":" : last.dbl ? "|" : " ") + "|");
+    }
+  }
+  return out.join("\n") + "\n";
+}
+
+if (typeof module !== "undefined") {
+  module.exports = { parse, serialize, transposeSong, keyBySemitones, numeralFor, normalizeBarText, parseChord, parseKey };
+}
+</script>
+
+<script>
+/* ===== The page ===== */
+(function () {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const els = {
+    sheet: $("#sheet"), chart: $("#chart"), status: $("#status"), txt: $("#txt"), file: $("#file"),
+    title: $("#ed-title"), style: $("#ed-style"), composer: $("#ed-composer"), keyLabel: $("#key-label"),
+    key: $("#sel-key"), to: $("#sel-to"), time: $("#inp-time"), cols: $("#out-cols"),
+    colsDec: $("#btn-cols-dec"), colsInc: $("#btn-cols-inc"), seg: $("#seg-num"),
+    undo: $("#btn-undo"), redo: $("#btn-redo"), text: $("#btn-text"), print: $("#btn-print")
+  };
+  const DRAFT_KEY = "barline.draft.v1", PREF_KEY = "barline.textpanel.v1";
+  const SIMILE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21 16.8 3h2.4L7.4 21z"/><circle cx="6.4" cy="7" r="2.4"/><circle cx="17.8" cy="17" r="2.4"/></svg>';
+  const EXAMPLE = [
+    "Title: Trust In God",
+    "Composer: Brandon Lake, Chris Brown, Mitch Wong, Steven Furtick",
+    "Style: Ballad",
+    "Key: E",
+    "Time: 6/8",
+    "Bars per line: 4",
+    "Numerals: below",
+    "",
+    "[A]",
+    "|: E | % | C#m7 | % |",
+    "| A | . E/G# | F#m7 | % :|",
+    "",
+    "[B]",
+    "|: E | % | C#m7 | % |",
+    "| A | % | F#m7 | A :|"
+  ].join("\n");
+
+  let song, editing = null, rendering = false, hist = [], hIdx = 0, statusTimer = 0, textTimer = 0;
+
+  /* ---------- small helpers ---------- */
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs) {
+      const v = attrs[k];
+      if (v === false || v == null) continue;
+      e.setAttribute(k, v === true ? "" : String(v));
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  }
+  function say(msg) {
+    els.status.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { els.status.textContent = ""; }, 7000);
+  }
+  function store(key, val) { try { localStorage.setItem(key, val); } catch (e) { /* storage is optional */ } }
+  function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function pretty(name) { return name.replace(/#/g, "♯").replace(/([A-G])b/g, "$1♭"); }
+  function prettyKey(name) {
+    const k = parseKey(name);
+    return k ? pretty(noteName(k.tonic)) + (k.minor ? " minor" : "") : name;
+  }
+  function accGlyph(a) { return a > 0 ? "♯" : a < 0 ? "♭" : ""; }
+  function setText(t) {
+    els.txt.value = t;
+    els.txt.rows = Math.min(34, Math.max(14, t.split("\n").length + 1));
+  }
+  function showSource(on) {
+    document.body.classList.toggle("no-source", !on);
+    els.text.setAttribute("aria-pressed", String(on));
+    store(PREF_KEY, on ? "1" : "0");
+  }
+
+  /* ---------- state changes ---------- */
+  function changed(o) {
+    o = o || {};
+    const text = serialize(song);
+    if (o.history !== false && text !== hist[hIdx]) {
+      hist.length = hIdx + 1;
+      hist.push(text);
+      if (hist.length > 300) hist.shift();
+      hIdx = hist.length - 1;
+    }
+    if (document.activeElement !== els.txt) setText(text);
+    store(DRAFT_KEY, text);
+    if (o.chart !== false) renderChart();
+    syncControls();
+  }
+  function restore(i) {
+    if (i < 0 || i >= hist.length) return;
+    hIdx = i;
+    song = parse(hist[i]);
+    editing = null;
+    setText(hist[i]);
+    store(DRAFT_KEY, hist[i]);
+    renderChart();
+    syncControls();
+  }
+
+  /* ---------- controls ---------- */
+  function fillKeys() {
+    if (!els.key.options.length) {
+      const maj = h("optgroup", { label: "Major" }), min = h("optgroup", { label: "Minor" });
+      MAJOR_KEYS.forEach((k) => maj.append(new Option(pretty(k), k)));
+      MINOR_KEYS.forEach((k) => min.append(new Option(pretty(k), k)));
+      els.key.append(maj, min);
+    }
+    if (!Array.from(els.key.options).some((o) => o.value === song.key)) els.key.add(new Option(pretty(song.key), song.key));
+    els.key.value = song.key;
+    const k = parseKey(song.key);
+    const list = (k && k.minor ? MINOR_KEYS : MAJOR_KEYS).filter((x) => x !== song.key);
+    els.to.replaceChildren(new Option("to key…", ""), ...list.map((x) => new Option(pretty(x), x)));
+    els.to.value = "";
+  }
+  function syncControls() {
+    const active = document.activeElement;
+    [[els.title, "title"], [els.style, "style"], [els.composer, "composer"]].forEach(([el, prop]) => {
+      if (el !== active && el.textContent !== song[prop]) el.textContent = song[prop];
+    });
+    fillKeys();
+    if (els.time !== active) els.time.value = song.time;
+    els.cols.textContent = song.cols;
+    els.colsDec.disabled = song.cols <= 1;
+    els.colsInc.disabled = song.cols >= 8;
+    els.seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.num === song.numerals)));
+    els.undo.disabled = hIdx <= 0;
+    els.redo.disabled = hIdx >= hist.length - 1;
+    els.keyLabel.textContent = "Key of " + prettyKey(song.key);
+  }
+
+  /* ---------- drawing the chart ---------- */
+  function tool(act, s, text, label, disabled) {
+    return h("button", { type: "button", "data-act": act, "data-s": s, "aria-label": label, title: label, disabled: !!disabled }, text);
+  }
+  function chordEl(tok, c) {
+    const wrap = h("span", { class: "chord" });
+    const num = song.numerals === "off" ? "" : numeralFor(tok, song.key);
+    if (song.numerals === "above") wrap.append(h("span", { class: "num above" }, num));
+    const sym = h("span", { class: "sym" }, h("span", { class: "root" }, LETTERS[c.root.l]));
+    if (c.root.a || c.q) {
+      sym.append(h("span", { class: "stack" },
+        h("span", { class: "acc" }, accGlyph(c.root.a)),
+        h("span", { class: "qual" }, prettyQuality(c.q))));
+    }
+    if (c.bass) sym.append(h("span", { class: "bass" }, "/" + LETTERS[c.bass.l] + accGlyph(c.bass.a)));
+    wrap.append(sym);
+    if (song.numerals === "below") wrap.append(h("span", { class: "num below" }, num));
+    return wrap;
+  }
+  function tokenEl(tok) {
+    if (tok === "%") { const s = h("span", { class: "simile", role: "img", "aria-label": "repeat previous bar" }); s.innerHTML = SIMILE; return s; }
+    if (tok === ".") return h("span", { class: "rest" });
+    if (tok === "/") return h("span", { class: "beat" }, "/");
+    const c = parseChord(tok);
+    return c ? chordEl(tok, c) : h("span", { class: "word" }, tok);
+  }
+  function buildBar(si, bi) {
+    const sec = song.sections[si], bar = sec.bars[bi], cols = song.cols;
+    const col = bi % cols;
+    const prev = col ? sec.bars[bi - 1] : null;
+    const next = col < cols - 1 ? sec.bars[bi + 1] : null;
+    const rowEnd = col === cols - 1 || bi === sec.bars.length - 1;
+    const isEditing = !!editing && editing.s === si && editing.b === bi;
+    const showDbl = bar.dbl && !bar.re && !(next && next.rs);
+    const d = h("div", { class: "bar", "data-s": si, "data-b": bi });
+
+    if (!bar.rs && !(prev && (prev.re || (prev.dbl && !bar.rs)))) d.classList.add("bl-left");
+    if (rowEnd && !bar.re && !showDbl) d.classList.add("bl-right");
+    if (bar.rs) { d.classList.add("has-rs"); d.append(h("i", { class: "rep rep-s", "aria-hidden": "true" })); }
+    if (bar.re) { d.classList.add("has-re"); d.append(h("i", { class: "rep rep-e", "aria-hidden": "true" })); }
+    else if (showDbl) d.append(h("i", { class: "dbl", "aria-hidden": "true" }));
+
+    if (si === 0 && bi === 0) {
+      const ts = /^(\d+)\s*\/\s*(\d+)$/.exec(song.time);
+      if (ts) d.append(h("span", { class: "timesig", role: "img", "aria-label": "Time signature " + ts[1] + " " + ts[2] }, h("span", null, ts[1]), h("span", null, ts[2])));
+    }
+    const toks = bar.chords ? bar.chords.split(" ") : [];
+    if (toks.length && /^\d\.$/.test(toks[0])) d.append(h("span", { class: "volta" }, toks.shift()));
+
+    if (isEditing) {
+      d.classList.add("editing");
+      const inp = h("input", {
+        id: "bar-input", class: "bar-input", type: "text", value: bar.chords, placeholder: "chord",
+        autocomplete: "off", autocapitalize: "off", autocorrect: "off", spellcheck: "false",
+        "aria-label": "Chords for bar " + (bi + 1) + (sec.label ? " of section " + sec.label : "")
+      });
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); finishEdit(e.shiftKey ? -1 : 1); }
+        else if (e.key === "Tab") { e.preventDefault(); finishEdit(e.shiftKey ? -1 : 1); }
+        else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+      });
+      inp.addEventListener("blur", () => {
+        if (rendering || !editing || document.getElementById("bar-input") !== inp) return;
+        finishEdit(0);
+      });
+      const pop = h("div", { class: "pop screen-only", role: "toolbar", "aria-label": "Bar tools" },
+        popBtn("rs", "|:", "Start a repeat at this bar", bar.rs, true),
+        popBtn("re", ":|", "End a repeat after this bar", bar.re, true),
+        popBtn("dbl", "||", "Double barline after this bar", bar.dbl, true),
+        popBtn("same", "%", "Same as the previous bar", null, true),
+        popBtn("ins", "+ Bar", "Insert a bar after this one", null, false),
+        popBtn("del", "Delete", "Delete this bar", null, false));
+      d.append(inp, pop);
+    } else {
+      const content = h("div", { class: "bar-content n" + Math.min(4, Math.max(1, toks.length)) });
+      toks.forEach((t) => content.append(tokenEl(t)));
+      d.append(content);
+      d.tabIndex = 0;
+      d.setAttribute("role", "button");
+      d.setAttribute("aria-label", "Bar " + (bi + 1) + ": " + (bar.chords || "empty") + ". Edit");
+    }
+    return d;
+  }
+  function popBtn(act, text, label, pressed, glyph) {
+    return h("button", {
+      type: "button", "data-pop": act, class: glyph ? "glyph" : null, title: label, "aria-label": label,
+      "aria-pressed": pressed == null ? null : String(!!pressed)
+    }, text);
+  }
+  function renderChart() {
+    rendering = true;
+    const frag = document.createDocumentFragment();
+    song.sections.forEach((sec, si) => {
+      const n = sec.bars.length;
+      const head = h("div", { class: "sec-head" },
+        h("input", {
+          class: "sec-label", id: "sec-label-" + si, "data-s": si, type: "text", value: sec.label,
+          size: Math.max(1, sec.label.length), placeholder: "name", "aria-label": "Section name",
+          autocomplete: "off", spellcheck: "false"
+        }),
+        h("div", { class: "sec-tools screen-only" },
+          tool("bar-dec", si, "−", "Remove the last bar", n <= 1),
+          h("span", { class: "count" }, n + (n === 1 ? " bar" : " bars")),
+          tool("bar-inc", si, "+", "Add a bar"),
+          h("span", { class: "sep", "aria-hidden": "true" }),
+          tool("dup", si, "Duplicate", "Duplicate this section"),
+          tool("up", si, "↑", "Move this section up", si === 0),
+          tool("down", si, "↓", "Move this section down", si === song.sections.length - 1),
+          tool("del", si, "Delete", "Delete this section", song.sections.length <= 1)));
+      const grid = h("div", { class: "grid" });
+      sec.bars.forEach((_, bi) => grid.append(buildBar(si, bi)));
+      frag.append(h("div", { class: "section" }, head, grid));
+    });
+    const ts = /^(\d+)\s*\/\s*(\d+)$/.exec(song.time);
+    els.chart.classList.toggle("has-ts", !!ts);
+    if (ts) els.chart.style.setProperty("--ts-gutter", Math.max(ts[1].length, ts[2].length) > 1 ? "1.15em" : ".8em");
+    els.chart.style.setProperty("--cols", song.cols);
+    els.chart.replaceChildren(frag);
+    focusEditing();
+    rendering = false;
+  }
+  function barNode(s, b) { return els.chart.querySelector('.bar[data-s="' + s + '"][data-b="' + b + '"]'); }
+  function refreshBar(s, b) {
+    const old = barNode(s, b);
+    if (!old) return;
+    rendering = true;
+    old.replaceWith(buildBar(s, b));
+    if (editing && editing.s === s && editing.b === b) focusEditing();
+    rendering = false;
+  }
+  function focusEditing() {
+    const inp = document.getElementById("bar-input");
+    if (!inp || !editing) return;
+    inp.focus();
+    if (editing.sel) inp.select(); else inp.setSelectionRange(inp.value.length, inp.value.length);
+    const bar = inp.closest(".bar"), pop = bar.querySelector(".pop");
+    const sr = els.sheet.getBoundingClientRect(), br = bar.getBoundingClientRect();
+    pop.style.maxWidth = Math.max(160, sr.width - 16) + "px";
+    const pw = pop.getBoundingClientRect().width;
+    let left = 0;
+    const over = br.left + pw - (sr.right - 8);
+    if (over > 0) left = -over;
+    if (br.left + left < sr.left + 8) left = sr.left + 8 - br.left;
+    pop.style.left = left + "px";
+  }
+
+  /* ---------- editing bars ---------- */
+  function neighbor(s, b, dir) {
+    const secs = song.sections;
+    if (dir > 0) {
+      if (b + 1 < secs[s].bars.length) return [{ s, b: b + 1 }, false];
+      if (s + 1 < secs.length) return [{ s: s + 1, b: 0 }, false];
+      if (secs[s].bars[b].chords) { secs[s].bars.push(newBar()); return [{ s, b: b + 1 }, true]; }
+      return [null, false];
+    }
+    if (b > 0) return [{ s, b: b - 1 }, false];
+    if (s > 0) return [{ s: s - 1, b: secs[s - 1].bars.length - 1 }, false];
+    return [null, false];
+  }
+  function startEdit(s, b) {
+    if (editing) finishEdit(0);
+    editing = { s, b, sel: true };
+    refreshBar(s, b);
+  }
+  function finishEdit(move) {
+    if (!editing) return;
+    const s = editing.s, b = editing.b;
+    const inp = document.getElementById("bar-input");
+    const bar = song.sections[s] && song.sections[s].bars[b];
+    editing = null;
+    if (!bar) { renderChart(); return; }
+    if (inp) bar.chords = normalizeBarText(inp.value);
+    let next = null, structural = false;
+    if (move) [next, structural] = neighbor(s, b, move);
+    if (next) editing = { s: next.s, b: next.b, sel: true };
+    if (structural) { changed(); return; }
+    changed({ chart: false });
+    refreshBar(s, b);
+    if (next) refreshBar(next.s, next.b);
+  }
+  function cancelEdit() {
+    if (!editing) return;
+    const s = editing.s, b = editing.b;
+    editing = null;
+    refreshBar(s, b);
+    const node = barNode(s, b);
+    if (node) node.focus();
+  }
+  function popAction(act) {
+    if (!editing) return;
+    const s = editing.s, b = editing.b, sec = song.sections[s], bar = sec.bars[b];
+    const inp = document.getElementById("bar-input");
+    if (inp) bar.chords = normalizeBarText(inp.value);
+    editing.sel = false;
+    if (act === "rs") bar.rs = !bar.rs;
+    else if (act === "re") { bar.re = !bar.re; if (bar.re) bar.dbl = false; }
+    else if (act === "dbl") { bar.dbl = !bar.dbl; if (bar.dbl) bar.re = false; }
+    else if (act === "same") {
+      bar.chords = "%";
+      const nx = neighbor(s, b, 1)[0];
+      editing = nx ? { s: nx.s, b: nx.b, sel: true } : null;
+    }
+    else if (act === "ins") { sec.bars.splice(b + 1, 0, newBar()); editing = { s, b: b + 1, sel: true }; }
+    else if (act === "del") {
+      if (sec.bars.length > 1) { sec.bars.splice(b, 1); editing = { s, b: Math.min(b, sec.bars.length - 1), sel: true }; }
+      else Object.assign(bar, newBar());
+    }
+    changed();
+  }
+
+  /* ---------- sections ---------- */
+  function nextLabel() {
+    const used = new Set(song.sections.map((x) => x.label));
+    for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") if (!used.has(ch)) return ch;
+    return "";
+  }
+  function secAction(act, s) {
+    const secs = song.sections, sec = secs[s];
+    if (!sec) return;
+    if (editing) finishEdit(0);
+    if (act === "bar-inc") sec.bars.push(newBar());
+    else if (act === "bar-dec") { if (sec.bars.length > 1) sec.bars.pop(); }
+    else if (act === "dup") secs.splice(s + 1, 0, { label: /^[A-Z]$/.test(sec.label) ? nextLabel() : sec.label, bars: sec.bars.map((x) => Object.assign({}, x)) });
+    else if (act === "up") { if (s > 0) { secs.splice(s - 1, 0, secs.splice(s, 1)[0]); s -= 1; } }
+    else if (act === "down") { if (s < secs.length - 1) { secs.splice(s + 1, 0, secs.splice(s, 1)[0]); s += 1; } }
+    else if (act === "del") { if (secs.length > 1) secs.splice(s, 1); }
+    changed();
+    const again = els.chart.querySelector('[data-act="' + act + '"][data-s="' + s + '"]');
+    if (again && !again.disabled) again.focus();
+  }
+
+  els.chart.addEventListener("mousedown", (e) => { if (e.target.closest(".pop")) e.preventDefault(); });
+  els.chart.addEventListener("click", (e) => {
+    const t = e.target;
+    const pb = t.closest("[data-pop]");
+    if (pb) { popAction(pb.dataset.pop); return; }
+    const ab = t.closest("[data-act]");
+    if (ab) { secAction(ab.dataset.act, +ab.dataset.s); return; }
+    if (t.closest("input, .pop")) return;
+    const bar = t.closest(".bar");
+    if (bar) startEdit(+bar.dataset.s, +bar.dataset.b);
+  });
+  els.chart.addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (t.classList.contains("bar") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); startEdit(+t.dataset.s, +t.dataset.b); }
+    else if (t.classList.contains("sec-label") && e.key === "Enter") { e.preventDefault(); t.blur(); }
+  });
+  els.chart.addEventListener("input", (e) => {
+    if (e.target.classList.contains("sec-label")) e.target.size = Math.max(1, e.target.value.length);
+  });
+  els.chart.addEventListener("change", (e) => {
+    const t = e.target;
+    if (!t.classList.contains("sec-label")) return;
+    const sec = song.sections[+t.dataset.s];
+    if (!sec) return;
+    sec.label = t.value.replace(/[\[\]]/g, "").trim();
+    t.value = sec.label;
+    changed({ chart: false });
+  });
+  $("#btn-add-section").addEventListener("click", () => {
+    song.sections.push({ label: nextLabel(), bars: Array.from({ length: song.cols * 2 }, newBar) });
+    changed();
+  });
+
+  /* ---------- title block ---------- */
+  function bindEditable(el, prop) {
+    if (el.contentEditable !== "plaintext-only") el.contentEditable = "true";
+    el.addEventListener("input", () => {
+      song[prop] = el.textContent.replace(/\s+/g, " ").trim();
+      changed({ chart: false, history: false });
+    });
+    el.addEventListener("blur", () => { el.textContent = song[prop]; changed({ chart: false }); });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+    el.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const t = ((e.clipboardData && e.clipboardData.getData("text/plain")) || "").replace(/\s+/g, " ");
+      document.execCommand("insertText", false, t);
+    });
+  }
+  bindEditable(els.title, "title");
+  bindEditable(els.style, "style");
+  bindEditable(els.composer, "composer");
+
+  /* ---------- toolbar ---------- */
+  els.key.addEventListener("change", () => { song.key = els.key.value; changed(); });
+  function transposeTo(name) {
+    transposeSong(song, name);
+    changed();
+    say("Transposed to " + prettyKey(song.key) + ".");
+  }
+  $("#btn-down").addEventListener("click", () => transposeTo(keyBySemitones(song.key, -1)));
+  $("#btn-up").addEventListener("click", () => transposeTo(keyBySemitones(song.key, 1)));
+  els.to.addEventListener("change", () => { if (els.to.value) transposeTo(els.to.value); });
+  els.time.addEventListener("change", () => { song.time = els.time.value.replace(/\s+/g, ""); changed(); });
+  els.time.addEventListener("keydown", (e) => { if (e.key === "Enter") els.time.blur(); });
+  els.colsDec.addEventListener("click", () => { song.cols = clampCols(song.cols - 1); changed(); });
+  els.colsInc.addEventListener("click", () => { song.cols = clampCols(song.cols + 1); changed(); });
+  els.seg.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-num]");
+    if (b) { song.numerals = b.dataset.num; changed(); }
+  });
+  els.undo.addEventListener("click", () => restore(hIdx - 1));
+  els.redo.addEventListener("click", () => restore(hIdx + 1));
+  els.text.addEventListener("click", () => showSource(document.body.classList.contains("no-source")));
+  $("#btn-new").addEventListener("click", () => {
+    song = parse("");
+    editing = null;
+    changed();
+    say("Started a new chart. Undo brings the previous one back.");
+  });
+
+  /* ---------- text panel ---------- */
+  function applyText() {
+    song = parse(els.txt.value);
+    editing = null;
+    store(DRAFT_KEY, els.txt.value);
+    renderChart();
+    syncControls();
+  }
+  els.txt.addEventListener("input", () => { clearTimeout(textTimer); textTimer = setTimeout(applyText, 150); });
+  els.txt.addEventListener("blur", () => {
+    clearTimeout(textTimer);
+    song = parse(els.txt.value);
+    editing = null;
+    changed();
+    setText(serialize(song));
+  });
+  $("#btn-copy").addEventListener("click", () => {
+    const text = serialize(song);
+    const fallback = () => { els.txt.focus(); els.txt.select(); say("Text selected. Press Ctrl+C or Cmd+C to copy it."); };
+    try { navigator.clipboard.writeText(text).then(() => say("Copied the chart text."), fallback); }
+    catch (e) { fallback(); }
+  });
+
+  /* ---------- files ---------- */
+  function fileName() {
+    const base = (song.title || "chart").replace(/[\\/:*?"<>|]/g, "").trim() || "chart";
+    return base + " - " + song.key + ".txt";
+  }
+  let downloads = null;
+  function downloadsCap() {
+    if (!downloads && window.claude && typeof window.claude.use === "function") {
+      downloads = Promise.resolve().then(() => window.claude.use("downloads")).catch(() => null);
+    }
+    return downloads || Promise.resolve(null);
+  }
+  async function save() {
+    if (editing) finishEdit(0);
+    const text = serialize(song), name = fileName();
+    const cap = await Promise.race([downloadsCap(), new Promise((r) => setTimeout(() => r(null), 2500))]);
+    if (cap) {
+      try { await cap.save({ filename: name, data: text }); say("Saved " + name + "."); }
+      catch (err) {
+        if (err && err.code === "declined") say("Save cancelled.");
+        else { showSource(true); say("Saving a file is not available in this view. Copy the text from the Text file panel instead."); }
+      }
+      return;
+    }
+    try {
+      const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+      const a = h("a", { href: url, download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      if (window.self !== window.top) { showSource(true); say("If no file appeared, copy the text from the Text file panel."); }
+      else say("Saved " + name + ".");
+    } catch (e) {
+      showSource(true);
+      say("Could not save a file here. Copy the text from the Text file panel instead.");
+    }
+  }
+  function openFile(file) {
+    if (!file) return;
+    file.text().then((t) => {
+      song = parse(t);
+      editing = null;
+      changed();
+      say("Opened " + file.name + ".");
+    }, () => say("Could not read " + file.name + ". Choose a plain text file saved from this page."));
+  }
+  $("#btn-save").addEventListener("click", save);
+  $("#btn-open").addEventListener("click", () => els.file.click());
+  els.file.addEventListener("change", () => { openFile(els.file.files[0]); els.file.value = ""; });
+  document.addEventListener("dragover", (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) e.preventDefault(); });
+  document.addEventListener("drop", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    openFile(e.dataTransfer.files[0]);
+  });
+  if (!window.claude && window.self === window.top) {
+    els.print.hidden = false;
+    els.print.addEventListener("click", () => { if (editing) finishEdit(0); window.print(); });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === "s") { e.preventDefault(); save(); return; }
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (k === "z" && !e.shiftKey) { e.preventDefault(); restore(hIdx - 1); }
+    else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); restore(hIdx + 1); }
+  });
+
+  /* ---------- start ---------- */
+  function start(data) {
+    let text = data && typeof data.text === "string" ? data.text : null;
+    if (text == null) text = recall(DRAFT_KEY);
+    song = parse(text && text.trim() ? text : EXAMPLE);
+    hist = [serialize(song)];
+    hIdx = 0;
+    const pref = recall(PREF_KEY);
+    showSource(pref == null ? window.matchMedia("(min-width: 981px)").matches : pref === "1");
+    setText(hist[0]);
+    renderChart();
+    syncControls();
+    downloadsCap();
+  }
+  const hot = window.claude && window.claude.hot;
+  if (hot && typeof hot.snapshot === "function") hot.snapshot(() => ({ text: serialize(song) }));
+  if (hot && typeof hot.ready === "function") hot.ready(start);
+  else start((hot && hot.data) || {});
+})();
+</script>
+</body>
+</html>
