@@ -154,7 +154,19 @@ body.no-source .source { display: none; }
   text-align: center; field-sizing: content;
 }
 .sec-label::placeholder { color: var(--sheet); opacity: .5; font-weight: 500; }
-.sec-tools { display: flex; align-items: center; gap: .1rem; font-size: .8125rem; color: var(--ink-soft); }
+.sec-id { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.sec-key { font-size: .875rem; font-weight: 500; color: var(--ink-soft); white-space: nowrap; }
+.sec-tools {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  gap: .1rem; font-size: .8125rem; color: var(--ink-soft);
+}
+.sec-keypick { display: flex; align-items: center; gap: .35rem; }
+.sec-tools select {
+  height: 1.75rem; padding: 0 .2rem; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--sheet); color: var(--ink);
+}
+.sec-tools select.on { border-color: var(--pencil); background: var(--pencil-wash); color: var(--pencil); }
 .sec-tools button {
   border: 0; background: transparent; color: inherit; cursor: pointer;
   padding: .25rem .5rem; border-radius: 4px; min-height: 1.75rem;
@@ -495,13 +507,37 @@ function transposeBarText(text, ld, sd, flat) {
 }
 /* Moves every chord by the interval between the old and new tonic, letter and semitone together,
    so C#m7 in E becomes Dm7 in F and D#m7 in F#, never an enharmonic stand-in. */
+function keyInterval(from, to) {
+  return {
+    ld: (to.tonic.l - from.tonic.l + 7) % 7,
+    sd: (notePc(to.tonic) - notePc(from.tonic) + 12) % 12,
+    flat: (to.minor ? FLAT_MINOR : FLAT_MAJOR).has(noteName(to.tonic))
+  };
+}
+function transposeBars(bars, fromName, toName) {
+  const from = parseKey(fromName), to = parseKey(toName);
+  if (!from || !to) return;
+  const iv = keyInterval(from, to);
+  for (const bar of bars) bar.chords = transposeBarText(bar.chords, iv.ld, iv.sd, iv.flat);
+}
+/* Where a section's own key lands when the whole song moves by the interval iv.
+   Keeps the same letter step as the song when that gives an ordinary key, otherwise the usual spelling. */
+function shiftKeyName(keyName, iv) {
+  const k = parseKey(keyName);
+  if (!k) return null;
+  const name = noteName(shiftNote(k.tonic, iv.ld, iv.sd, iv.flat)) + (k.minor ? "m" : "");
+  if ((k.minor ? MINOR_KEYS : MAJOR_KEYS).includes(name)) return name;
+  return (k.minor ? MINOR_BY_PC : MAJOR_BY_PC)[(notePc(k.tonic) + iv.sd) % 12];
+}
 function transposeSong(song, toName) {
   const from = parseKey(song.key), to = parseKey(toName);
   if (!from || !to) return;
-  const ld = (to.tonic.l - from.tonic.l + 7) % 7;
-  const sd = (notePc(to.tonic) - notePc(from.tonic) + 12) % 12;
-  const flat = (to.minor ? FLAT_MINOR : FLAT_MAJOR).has(noteName(to.tonic));
-  for (const sec of song.sections) for (const bar of sec.bars) bar.chords = transposeBarText(bar.chords, ld, sd, flat);
+  const iv = keyInterval(from, to);
+  for (const sec of song.sections) {
+    const target = sec.key ? shiftKeyName(sec.key, iv) : null;
+    if (target) { transposeBars(sec.bars, sec.key, target); sec.key = target; }
+    else transposeBars(sec.bars, song.key, to.name);
+  }
   song.key = to.name;
 }
 function keyBySemitones(keyName, delta) {
@@ -597,15 +633,16 @@ function parse(text) {
     const line = raw.trim();
     if (!line) continue;
     let m = /^\[(.*)\]$/.exec(line);
-    if (m) { sec = { label: m[1].trim(), bars: [] }; song.sections.push(sec); continue; }
+    if (m) { sec = { label: m[1].trim(), key: null, bars: [] }; song.sections.push(sec); continue; }
     m = /^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$/.exec(line);
     const field = m && HEADER_KEYS[m[1].toLowerCase().replace(/\s+/g, " ")];
+    if (field === "key" && sec) { const sk = parseKey(m[2]); sec.key = sk ? sk.name : null; continue; }
     if (field) { setHeader(song, field, m[2].trim()); continue; }
     if (m && !line.includes("|")) { song.extra.push(line); continue; }
-    if (!sec) { sec = { label: "", bars: [] }; song.sections.push(sec); }
+    if (!sec) { sec = { label: "", key: null, bars: [] }; song.sections.push(sec); }
     parseBars(line, sec.bars);
   }
-  if (!song.sections.length) song.sections.push({ label: "A", bars: Array.from({ length: song.cols * 2 }, newBar) });
+  if (!song.sections.length) song.sections.push({ label: "A", key: null, bars: Array.from({ length: song.cols * 2 }, newBar) });
   for (const s of song.sections) if (!s.bars.length) s.bars.push(newBar());
   const k = parseKey(song.key);
   song.key = k ? k.name : guessKey(song);
@@ -627,6 +664,7 @@ function serialize(song) {
   for (const sec of song.sections) for (const bar of sec.bars) w = Math.max(w, bar.chords.length);
   for (const sec of song.sections) {
     out.push("", "[" + sec.label + "]");
+    if (sec.key) out.push("Key: " + sec.key);
     for (let i = 0; i < sec.bars.length; i += song.cols) {
       const row = sec.bars.slice(i, i + song.cols);
       let line = "";
@@ -776,9 +814,9 @@ if (typeof module !== "undefined") {
   function tool(act, s, text, label, disabled) {
     return h("button", { type: "button", "data-act": act, "data-s": s, "aria-label": label, title: label, disabled: !!disabled }, text);
   }
-  function chordEl(tok, c) {
+  function chordEl(tok, c, key) {
     const wrap = h("span", { class: "chord" });
-    const num = song.numerals === "off" ? "" : numeralFor(tok, song.key);
+    const num = song.numerals === "off" ? "" : numeralFor(tok, key);
     if (song.numerals === "above") wrap.append(h("span", { class: "num above" }, num));
     const sym = h("span", { class: "sym" }, h("span", { class: "root" }, LETTERS[c.root.l]));
     if (c.root.a || c.q) {
@@ -791,12 +829,12 @@ if (typeof module !== "undefined") {
     if (song.numerals === "below") wrap.append(h("span", { class: "num below" }, num));
     return wrap;
   }
-  function tokenEl(tok) {
+  function tokenEl(tok, key) {
     if (tok === "%") { const s = h("span", { class: "simile", role: "img", "aria-label": "repeat previous bar" }); s.innerHTML = SIMILE; return s; }
     if (tok === ".") return h("span", { class: "rest" });
     if (tok === "/") return h("span", { class: "beat" }, "/");
     const c = parseChord(tok);
-    return c ? chordEl(tok, c) : h("span", { class: "word" }, tok);
+    return c ? chordEl(tok, c, key) : h("span", { class: "word" }, tok);
   }
   function buildBar(si, bi) {
     const sec = song.sections[si], bar = sec.bars[bi], cols = song.cols;
@@ -847,7 +885,8 @@ if (typeof module !== "undefined") {
       d.append(inp, pop);
     } else {
       const content = h("div", { class: "bar-content n" + Math.min(4, Math.max(1, toks.length)) });
-      toks.forEach((t) => content.append(tokenEl(t)));
+      const key = sec.key || song.key;
+      toks.forEach((t) => content.append(tokenEl(t, key)));
       d.append(content);
       d.tabIndex = 0;
       d.setAttribute("role", "button");
@@ -861,18 +900,35 @@ if (typeof module !== "undefined") {
       "aria-pressed": pressed == null ? null : String(!!pressed)
     }, text);
   }
+  function keyPicker(sec, si) {
+    const sel = h("select", {
+      id: "sec-key-" + si, "data-seckey": true, "data-s": si, class: sec.key ? "on" : null,
+      title: "Key of this section. Overrides the song key for this section only."
+    });
+    const maj = h("optgroup", { label: "Major" }), min = h("optgroup", { label: "Minor" });
+    MAJOR_KEYS.forEach((k) => maj.append(new Option(pretty(k), k)));
+    MINOR_KEYS.forEach((k) => min.append(new Option(pretty(k), k)));
+    sel.append(new Option(pretty(song.key) + " (song)", ""), maj, min);
+    if (sec.key && !MAJOR_KEYS.includes(sec.key) && !MINOR_KEYS.includes(sec.key)) sel.append(new Option(pretty(sec.key), sec.key));
+    sel.value = sec.key || "";
+    return h("label", { class: "sec-keypick" }, h("span", null, "Key"), sel);
+  }
   function renderChart() {
     rendering = true;
     const frag = document.createDocumentFragment();
     song.sections.forEach((sec, si) => {
       const n = sec.bars.length;
       const head = h("div", { class: "sec-head" },
-        h("input", {
-          class: "sec-label", id: "sec-label-" + si, "data-s": si, type: "text", value: sec.label,
-          size: Math.max(1, sec.label.length), placeholder: "name", "aria-label": "Section name",
-          autocomplete: "off", spellcheck: "false"
-        }),
+        h("div", { class: "sec-id" },
+          h("input", {
+            class: "sec-label", id: "sec-label-" + si, "data-s": si, type: "text", value: sec.label,
+            size: Math.max(1, sec.label.length), placeholder: "name", "aria-label": "Section name",
+            autocomplete: "off", spellcheck: "false"
+          }),
+          sec.key ? h("span", { class: "sec-key" }, "Key of " + prettyKey(sec.key)) : null),
         h("div", { class: "sec-tools screen-only" },
+          keyPicker(sec, si),
+          h("span", { class: "sep", "aria-hidden": "true" }),
           tool("bar-dec", si, "−", "Remove the last bar", n <= 1),
           h("span", { class: "count" }, n + (n === 1 ? " bar" : " bars")),
           tool("bar-inc", si, "+", "Add a bar"),
@@ -994,7 +1050,7 @@ if (typeof module !== "undefined") {
     if (editing) finishEdit(0);
     if (act === "bar-inc") sec.bars.push(newBar());
     else if (act === "bar-dec") { if (sec.bars.length > 1) sec.bars.pop(); }
-    else if (act === "dup") secs.splice(s + 1, 0, { label: /^[A-Z]$/.test(sec.label) ? nextLabel() : sec.label, bars: sec.bars.map((x) => Object.assign({}, x)) });
+    else if (act === "dup") secs.splice(s + 1, 0, { label: /^[A-Z]$/.test(sec.label) ? nextLabel() : sec.label, key: sec.key || null, bars: sec.bars.map((x) => Object.assign({}, x)) });
     else if (act === "up") { if (s > 0) { secs.splice(s - 1, 0, secs.splice(s, 1)[0]); s -= 1; } }
     else if (act === "down") { if (s < secs.length - 1) { secs.splice(s + 1, 0, secs.splice(s, 1)[0]); s += 1; } }
     else if (act === "del") { if (secs.length > 1) secs.splice(s, 1); }
@@ -1024,6 +1080,16 @@ if (typeof module !== "undefined") {
   });
   els.chart.addEventListener("change", (e) => {
     const t = e.target;
+    if (t.matches("[data-seckey]")) {
+      const s = +t.dataset.s;
+      if (!song.sections[s]) return;
+      if (editing) finishEdit(0);
+      song.sections[s].key = t.value || null;
+      changed();
+      const again = document.getElementById("sec-key-" + s);
+      if (again) again.focus();
+      return;
+    }
     if (!t.classList.contains("sec-label")) return;
     const sec = song.sections[+t.dataset.s];
     if (!sec) return;
@@ -1032,7 +1098,7 @@ if (typeof module !== "undefined") {
     changed({ chart: false });
   });
   $("#btn-add-section").addEventListener("click", () => {
-    song.sections.push({ label: nextLabel(), bars: Array.from({ length: song.cols * 2 }, newBar) });
+    song.sections.push({ label: nextLabel(), key: null, bars: Array.from({ length: song.cols * 2 }, newBar) });
     changed();
   });
 
